@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Papillon Ethinics Store"
+version = "1.0.0"
+id = "artifacts/papillon-store"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23249
+
+[services.development]
+run = "pnpm --filter @workspace/papillon-store run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/papillon-store", "run", "build" ]
+publicDir = "artifacts/papillon-store/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23249"
+BASE_PATH = "/"
