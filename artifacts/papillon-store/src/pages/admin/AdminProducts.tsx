@@ -272,7 +272,7 @@ export default function AdminProducts() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
-  const searchRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const load = async () => {
     setLoading(true);

@@ -19,6 +19,7 @@ import AdminGuard from "@/pages/admin/AdminGuard";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminHomepage from "@/pages/admin/AdminHomepage";
 import AdminProducts from "@/pages/admin/AdminProducts";
+import AdminOrders from "@/pages/admin/AdminOrders";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,13 @@ function Router() {
         {() => (
           <AdminGuard>
             <AdminProducts />
+          </AdminGuard>
+        )}
+      </Route>
+      <Route path="/admin/orders">
+        {() => (
+          <AdminGuard>
+            <AdminOrders />
           </AdminGuard>
         )}
       </Route>

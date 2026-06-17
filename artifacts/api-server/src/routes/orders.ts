@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, productVariantsTable, customersTable, paymentLogsTable } from "@workspace/db";
-import { eq, and, ilike, desc, sql, or } from "drizzle-orm";
+import { eq, and, like, desc, sql, or } from "drizzle-orm";
 import { adminAuth } from "../middlewares/adminAuth";
 
 const router = Router();
@@ -20,8 +20,8 @@ router.get("/", adminAuth, async (req, res) => {
     if (search) {
       filters.push(
         or(
-          ilike(ordersTable.customerEmail, `%${search}%`),
-          ilike(ordersTable.orderNumber, `%${search}%`)
+          like(ordersTable.customerEmail, `%${search}%`),
+          like(ordersTable.orderNumber, `%${search}%`)
         )
       );
     }
@@ -39,16 +39,29 @@ router.get("/", adminAuth, async (req, res) => {
   }
 });
 
+router.get("/customer/:email", adminAuth, async (req, res) => {
+  try {
+    const orders = await db.select().from(ordersTable)
+      .where(eq(ordersTable.customerEmail, String(req.params.email)))
+      .orderBy(desc(ordersTable.createdAt));
+    res.json(orders);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 router.get("/:id", adminAuth, async (req, res) => {
   try {
-    const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, Number(req.params.id))).limit(1);
+    const [order] = await db.select().from(ordersTable)
+      .where(eq(ordersTable.id, Number(req.params.id)))
+      .limit(1);
     if (!order) {
       res.status(404).json({ error: "Order not found" });
       return;
     }
-
-    const paymentLogs = await db.select().from(paymentLogsTable).where(eq(paymentLogsTable.orderId, order.id));
-
+    const paymentLogs = await db.select().from(paymentLogsTable)
+      .where(eq(paymentLogsTable.orderId, order.id));
     res.json({ ...order, paymentLogs });
   } catch (error) {
     req.log.error(error);
@@ -56,62 +69,68 @@ router.get("/:id", adminAuth, async (req, res) => {
   }
 });
 
+// SQLite (better-sqlite3) transactions are synchronous — no async/await inside db.transaction()
 router.post("/", async (req, res) => {
   try {
     const { customerName, customerEmail, customerPhone, shippingAddress, items } = req.body;
+    if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
 
-    const result = await db.transaction(async (tx) => {
-      // Validate inventory and items
-      for (const item of items) {
-        const [variant] = await tx.select().from(productVariantsTable).where(eq(productVariantsTable.id, item.variantId));
-        if (!variant || (variant.inventoryQty - variant.inventoryReserved) < item.quantity) {
-          throw new Error(`Insufficient inventory for ${item.title} (${item.size})`);
-        }
+    // Validate inventory outside transaction (reads are fine async)
+    for (const item of items) {
+      const [variant] = await db.select().from(productVariantsTable)
+        .where(eq(productVariantsTable.id, item.variantId));
+      if (!variant || (variant.inventoryQty - variant.inventoryReserved) < item.quantity) {
+        res.status(400).json({ error: `Insufficient inventory for ${item.title} (${item.size})` });
+        return;
       }
+    }
 
-      // Reserve inventory
-      for (const item of items) {
-        await tx.update(productVariantsTable)
-          .set({ inventoryReserved: sql`${productVariantsTable.inventoryReserved} + ${item.quantity}` })
-          .where(eq(productVariantsTable.id, item.variantId));
-      }
+    const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+    const shipping = 0;
+    const total = subtotal + shipping;
 
-      // Upsert customer
-      let [customer] = await tx.select().from(customersTable).where(eq(customersTable.email, customerEmail));
-      if (!customer) {
-        [customer] = await tx.insert(customersTable).values({
-          name: customerName,
-          email: customerEmail,
-          phone: customerPhone,
-        }).returning();
-      }
-
-      const countResult = await tx.select({ count: sql<number>`count(*)::int` }).from(ordersTable);
-      const orderNumber = `PE-${1000 + countResult[0].count}`;
-
-      const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
-      const shipping = 0; // Or calculate shipping
-      const total = subtotal + shipping;
-
-      const [order] = await tx.insert(ordersTable).values({
-        orderNumber,
-        customerId: customer.id,
-        customerName,
-        customerEmail,
-        customerPhone,
-        shippingAddress,
-        items,
-        subtotal: subtotal.toString(),
-        shipping: shipping.toString(),
-        total: total.toString(),
-        status: "pending",
-        paymentStatus: "pending",
+    // Upsert customer
+    let [customer] = await db.select().from(customersTable)
+      .where(eq(customersTable.email, customerEmail));
+    if (!customer) {
+      [customer] = await db.insert(customersTable).values({
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone,
       }).returning();
+    }
 
-      return order;
-    });
+    // Generate order number
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(ordersTable);
+    const orderNumber = `PE-${1000 + Number(count) + 1}`;
 
-    res.status(201).json(result);
+    // Create order
+    const [order] = await db.insert(ordersTable).values({
+      orderNumber,
+      customerId: customer.id,
+      customerName,
+      customerEmail,
+      customerPhone,
+      shippingAddress,
+      items,
+      subtotal,
+      shipping,
+      total,
+      status: "pending",
+      paymentStatus: "pending",
+    }).returning();
+
+    // Reserve inventory (best-effort after insert)
+    for (const item of items) {
+      await db.update(productVariantsTable)
+        .set({ inventoryReserved: sql`${productVariantsTable.inventoryReserved} + ${item.quantity}` })
+        .where(eq(productVariantsTable.id, item.variantId));
+    }
+
+    res.status(201).json(order);
   } catch (error: any) {
     req.log.error(error);
     res.status(400).json({ error: error.message || "Bad Request" });
@@ -125,24 +144,11 @@ router.patch("/:id/status", adminAuth, async (req, res) => {
       .set({ status, notes, updatedAt: new Date() })
       .where(eq(ordersTable.id, Number(req.params.id)))
       .returning();
-
     if (!order) {
       res.status(404).json({ error: "Order not found" });
       return;
     }
     res.json(order);
-  } catch (error) {
-    req.log.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-router.get("/customer/:email", adminAuth, async (req, res) => {
-  try {
-    const orders = await db.select().from(ordersTable)
-      .where(eq(ordersTable.customerEmail, req.params.email))
-      .orderBy(desc(ordersTable.createdAt));
-    res.json(orders);
   } catch (error) {
     req.log.error(error);
     res.status(500).json({ error: "Internal Server Error" });
