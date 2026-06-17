@@ -123,29 +123,11 @@ export default function Cart() {
                 <p className="text-xs text-muted-foreground mt-1 text-right">Tax included</p>
               </div>
 
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button className="w-full bg-secondary hover:bg-secondary/90 text-white rounded-full h-14 text-lg font-bold shadow-md hover:shadow-lg transition-all">
-                    Proceed to Checkout
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md text-center p-8">
-                  <DialogHeader>
-                    <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">🚀</span>
-                    </div>
-                    <DialogTitle className="font-heading text-3xl text-primary mb-2">Coming Soon!</DialogTitle>
-                    <DialogDescription className="text-lg">
-                      Thank you for your interest in Papillon Ethinics. Our checkout system is currently being built and will be available soon.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="mt-6">
-                    <Button variant="outline" className="w-full rounded-full" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))}>
-                      Back to Cart
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Link href="/checkout">
+                <Button className="w-full bg-secondary hover:bg-secondary/90 text-white rounded-full h-14 text-lg font-bold shadow-md hover:shadow-lg transition-all">
+                  Proceed to Checkout
+                </Button>
+              </Link>
             </div>
           </div>
         )}
