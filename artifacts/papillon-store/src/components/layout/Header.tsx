@@ -3,10 +3,13 @@ import { useCart } from "@/hooks/use-cart";
 import { ShoppingBag, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useSiteConfig } from "@/context/SiteConfigContext";
 
 export function Header() {
   const { itemCount } = useCart();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { config } = useSiteConfig();
+  const { announcementBar } = config;
 
   const productTypes = [
     "Cotton Frock",
@@ -19,10 +22,12 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white shadow-sm">
-      <div className="w-full bg-[#00af13] text-white text-center py-2 text-sm font-medium">
-        Free Shipping On Any 2 Purchases! 🎉
-      </div>
-      
+      {announcementBar.enabled && (
+        <div className="w-full bg-[#00af13] text-white text-center py-2 text-sm font-medium">
+          {announcementBar.text}
+        </div>
+      )}
+
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center">
@@ -41,7 +46,7 @@ export function Header() {
             <Link href="/" className="text-foreground hover:text-primary transition-colors">
               Home
             </Link>
-            
+
             <div className="relative group">
               <Link href="/collections" className="text-foreground hover:text-primary transition-colors py-2">
                 Collections
@@ -87,7 +92,7 @@ export function Header() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto py-4">
               <nav className="flex flex-col space-y-2 px-4">
                 <Link href="/" className="py-2 text-lg font-medium" onClick={() => setIsMenuOpen(false)}>
@@ -96,7 +101,7 @@ export function Header() {
                 <Link href="/collections" className="py-2 text-lg font-medium" onClick={() => setIsMenuOpen(false)}>
                   All Collections
                 </Link>
-                
+
                 <div className="pl-4 flex flex-col space-y-2 py-2 border-l-2 ml-2">
                   {productTypes.map((type) => (
                     <Link
