@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Image, LogOut, Store } from "lucide-react";
+import { LayoutDashboard, Image, Package, LogOut, Store } from "lucide-react";
 
 const NAV = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Homepage", href: "/admin/homepage", icon: Image },
+  { label: "Products", href: "/admin/products", icon: Package },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -12,6 +13,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const handleLogout = () => {
     sessionStorage.removeItem("papillon_admin_auth");
+    sessionStorage.removeItem("papillon_admin_token");
     setLocation("/admin");
   };
 

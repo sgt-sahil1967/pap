@@ -36,8 +36,8 @@ externalPort = 3000
 [userenv.shared]
 PHONEPE_SALT_INDEX = "1"
 PHONEPE_BASE_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox"
-ADMIN_EMAIL = "admin@papillonethinics.com"
+ADMIN_EMAIL = "admin"
 PHONEPE_MERCHANT_ID = "PGTESTPAYUAT"
 PHONEPE_SALT_KEY = "099eb0cd-02cf-4dc2-a4c3-df3f7d563d2f"
-ADMIN_PASSWORD = "Admin@Papillon2024"
-JWT_SECRET = "papillon-jwt-secret-2024-change-in-production"
+ADMIN_PASSWORD = "admin123"
+JWT_SECRET = "papillon_admin_secret_2024"

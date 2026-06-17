@@ -4,23 +4,24 @@ import { adminAuth } from "../middlewares/adminAuth";
 
 const router = Router();
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD!;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "admin123";
 
-router.post("/login", (req, res) => {
-  const { email, password } = req.body;
+router.post("/login", (req, res): void => {
+  const { email, password } = req.body as { email: string; password: string };
   if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
     const token = generateToken(email);
-    return res.json({ token });
+    res.json({ token });
+    return;
   }
-  return res.status(401).json({ error: "Invalid credentials" });
+  res.status(401).json({ error: "Invalid credentials" });
 });
 
-router.get("/me", adminAuth, (req, res) => {
+router.get("/me", adminAuth, (req, res): void => {
   res.json({ email: req.admin?.email });
 });
 
-router.post("/logout", (req, res) => {
+router.post("/logout", (_req, res): void => {
   res.sendStatus(200);
 });
 

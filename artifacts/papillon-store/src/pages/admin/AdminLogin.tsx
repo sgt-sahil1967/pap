@@ -11,19 +11,29 @@ export default function AdminLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      if (id === "admin" && password === "admin123") {
-        sessionStorage.setItem("papillon_admin_auth", "true");
-        setLocation("/admin/dashboard");
-      } else {
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: id, password }),
+      });
+      if (!res.ok) {
         setError("Invalid credentials. Please try again.");
+        return;
       }
+      const { token } = await res.json();
+      sessionStorage.setItem("papillon_admin_auth", "true");
+      sessionStorage.setItem("papillon_admin_token", token);
+      setLocation("/admin/dashboard");
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
   return (
@@ -40,9 +50,7 @@ export default function AdminLogin() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Admin ID
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Admin ID</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -58,9 +66,7 @@ export default function AdminLogin() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -68,6 +74,7 @@ export default function AdminLogin() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
+                  autoComplete="current-password"
                   className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   required
                 />

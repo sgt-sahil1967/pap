@@ -18,6 +18,7 @@ import AdminLogin from "@/pages/admin/AdminLogin";
 import AdminGuard from "@/pages/admin/AdminGuard";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminHomepage from "@/pages/admin/AdminHomepage";
+import AdminProducts from "@/pages/admin/AdminProducts";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,13 @@ function Router() {
         {() => (
           <AdminGuard>
             <AdminHomepage />
+          </AdminGuard>
+        )}
+      </Route>
+      <Route path="/admin/products">
+        {() => (
+          <AdminGuard>
+            <AdminProducts />
           </AdminGuard>
         )}
       </Route>
