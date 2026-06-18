@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { db, ordersTable, paymentLogsTable, productVariantsTable, inventoryLogsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { paymentsService } from "@workspace/db";
 import { initiatePayment, checkPaymentStatus, buildChecksum } from "../lib/phonepe";
 import crypto from "crypto";
 
@@ -9,7 +8,7 @@ const router = Router();
 router.post("/initiate", async (req, res) => {
   try {
     const { orderId } = req.body;
-    const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, orderId) });
+    const order = await paymentsService.getOrderById(orderId);
 
     if (!order || order.paymentStatus !== "pending") {
       res.status(400).json({ error: "Invalid order or payment already processed" });
@@ -34,12 +33,11 @@ router.post("/initiate", async (req, res) => {
       callbackUrl,
     });
 
-    await db.insert(paymentLogsTable).values({
+    await paymentsService.createLog({
       orderId,
       merchantTransactionId,
       amount: amountInPaise,
-      status: "INITIATED",
-      requestPayload: result.data as any,
+      requestPayload: result.data as Record<string, unknown>,
     });
 
     if (result.success && result.redirectUrl) {
@@ -60,7 +58,10 @@ router.post("/webhook", async (req, res) => {
     const SALT_KEY = process.env.PHONEPE_SALT_KEY!;
     const SALT_INDEX = process.env.PHONEPE_SALT_INDEX || "1";
 
-    const expectedChecksum = crypto.createHash("sha256").update(response + SALT_KEY).digest("hex") + "###" + SALT_INDEX;
+    const expectedChecksum =
+      crypto.createHash("sha256").update(response + SALT_KEY).digest("hex") +
+      "###" +
+      SALT_INDEX;
 
     if (xVerify !== expectedChecksum) {
       res.status(400).send("Invalid signature");
@@ -71,62 +72,29 @@ router.post("/webhook", async (req, res) => {
     const { success, code, data } = decoded;
     const merchantTransactionId = data.merchantTransactionId;
 
-    const [paymentLog] = await db.select().from(paymentLogsTable).where(eq(paymentLogsTable.merchantTransactionId, merchantTransactionId));
+    const paymentLog = await paymentsService.getLogByMerchantId(merchantTransactionId);
     if (!paymentLog) {
       res.status(404).send("Payment log not found");
       return;
     }
 
-    await db.transaction(async (tx) => {
-      await tx.update(paymentLogsTable)
-        .set({
-          status: code,
-          phonePeTransactionId: data.transactionId,
-          responsePayload: decoded,
-          updatedAt: new Date(),
-        })
-        .where(eq(paymentLogsTable.id, paymentLog.id));
-
-      const order = await tx.query.ordersTable.findFirst({ where: eq(ordersTable.id, paymentLog.orderId) });
-      if (!order) return;
-
-      if (success && code === "PAYMENT_SUCCESS") {
-        await tx.update(ordersTable)
-          .set({ paymentStatus: "paid", status: "confirmed", updatedAt: new Date() })
-          .where(eq(ordersTable.id, order.id));
-
-        for (const item of order.items) {
-          await tx.update(productVariantsTable)
-            .set({
-              inventoryReserved: sql`${productVariantsTable.inventoryReserved} - ${item.quantity}`,
-              inventoryQty: sql`${productVariantsTable.inventoryQty} - ${item.quantity}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(productVariantsTable.id, item.variantId));
-
-          await tx.insert(inventoryLogsTable).values({
-            productId: Number(item.productId),
-            variantId: item.variantId,
-            delta: -item.quantity,
-            reason: "sale",
-            orderId: order.id,
-          });
-        }
-      } else if (code !== "PAYMENT_PENDING") {
-        await tx.update(ordersTable)
-          .set({ paymentStatus: "failed", updatedAt: new Date() })
-          .where(eq(ordersTable.id, order.id));
-
-        for (const item of order.items) {
-          await tx.update(productVariantsTable)
-            .set({
-              inventoryReserved: sql`${productVariantsTable.inventoryReserved} - ${item.quantity}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(productVariantsTable.id, item.variantId));
-        }
-      }
+    await paymentsService.updateLog(paymentLog.id, {
+      status: code,
+      phonePeTransactionId: data.transactionId,
+      responsePayload: decoded,
     });
+
+    const order = await paymentsService.getOrderById(paymentLog.orderId);
+    if (!order) {
+      res.status(200).send("OK");
+      return;
+    }
+
+    if (success && code === "PAYMENT_SUCCESS") {
+      await paymentsService.handlePaymentSuccess(paymentLog.id, order.id, order.items);
+    } else if (code !== "PAYMENT_PENDING") {
+      await paymentsService.handlePaymentFailure(order.id, order.items);
+    }
 
     res.status(200).send("OK");
   } catch (error) {
@@ -140,22 +108,20 @@ router.get("/status/:merchantTransactionId", async (req, res) => {
     const { merchantTransactionId } = req.params;
     const result = await checkPaymentStatus(merchantTransactionId);
 
-    const [paymentLog] = await db.select().from(paymentLogsTable).where(eq(paymentLogsTable.merchantTransactionId, merchantTransactionId));
+    const paymentLog = await paymentsService.getLogByMerchantId(merchantTransactionId);
     if (!paymentLog) {
       res.status(404).json({ error: "Payment not found" });
       return;
     }
 
-    // Update DB with latest status if it changed
     if (result.code !== paymentLog.status) {
-      // Re-use logic from webhook or similar for status update
-      // For brevity, just updating the log here, real app should trigger same logic as webhook
-      await db.update(paymentLogsTable)
-        .set({ status: result.code, phonePeTransactionId: result.transactionId, updatedAt: new Date() })
-        .where(eq(paymentLogsTable.id, paymentLog.id));
+      await paymentsService.updateLog(paymentLog.id, {
+        status: result.code,
+        phonePeTransactionId: result.transactionId,
+      });
     }
 
-    const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, paymentLog.orderId) });
+    const order = await paymentsService.getOrderById(paymentLog.orderId);
     res.json({ order, paymentStatus: result.code });
   } catch (error) {
     req.log.error(error);
@@ -166,8 +132,7 @@ router.get("/status/:merchantTransactionId", async (req, res) => {
 router.get("/callback", async (req, res) => {
   try {
     const txnId = req.query.txnId as string;
-    const result = await checkPaymentStatus(txnId);
-    // You should probably update the DB here too if not already updated by webhook
+    await checkPaymentStatus(txnId);
     res.redirect(`/payment/status?txnId=${txnId}&verified=true`);
   } catch (error) {
     req.log.error(error);

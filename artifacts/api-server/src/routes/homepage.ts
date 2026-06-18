@@ -1,22 +1,12 @@
 import { Router } from "express";
-import { db, homepageSettingsTable } from "@workspace/db";
+import { homepageService } from "@workspace/db";
 import { adminAuth } from "../middlewares/adminAuth";
-import { eq } from "drizzle-orm";
 
 const router = Router();
 
 router.get("/", async (req, res) => {
   try {
-    let settings = await db.query.homepageSettingsTable.findFirst();
-    if (!settings) {
-      settings = {
-        id: 1,
-        banners: [],
-        announcementText: "Free Shipping On Any 2 Purchases!",
-        announcementEnabled: true,
-        updatedAt: new Date(),
-      };
-    }
+    const settings = await homepageService.get();
     res.json(settings);
   } catch (error) {
     req.log.error(error);
@@ -27,18 +17,7 @@ router.get("/", async (req, res) => {
 router.put("/", adminAuth, async (req, res) => {
   try {
     const { banners, announcementText, announcementEnabled } = req.body;
-    let settings = await db.query.homepageSettingsTable.findFirst();
-
-    if (settings) {
-      [settings] = await db.update(homepageSettingsTable)
-        .set({ banners, announcementText, announcementEnabled, updatedAt: new Date() })
-        .where(eq(homepageSettingsTable.id, settings.id))
-        .returning();
-    } else {
-      [settings] = await db.insert(homepageSettingsTable)
-        .values({ banners, announcementText, announcementEnabled })
-        .returning();
-    }
+    const settings = await homepageService.upsert({ banners, announcementText, announcementEnabled });
     res.json(settings);
   } catch (error) {
     req.log.error(error);
