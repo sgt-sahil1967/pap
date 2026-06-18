@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11"]
+modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
@@ -41,3 +41,6 @@ PHONEPE_MERCHANT_ID = "PGTESTPAYUAT"
 PHONEPE_SALT_KEY = "099eb0cd-02cf-4dc2-a4c3-df3f7d563d2f"
 ADMIN_PASSWORD = "admin123"
 JWT_SECRET = "papillon_admin_secret_2024"
+
+[nix]
+channel = "stable-25_05"
