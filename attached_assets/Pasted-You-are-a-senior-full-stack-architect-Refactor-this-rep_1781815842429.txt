@@ -1,0 +1,204 @@
+You are a senior full-stack architect. Refactor this repository into a production-ready ecommerce platform for deployment on Vercel + Supabase.
+
+Current repository structure contains:
+
+* artifacts/papillon-store
+* artifacts/papillon-admin
+* artifacts/api-server
+* artifacts/mockup-sandbox
+* lib/api-client-react
+* lib/api-spec
+* lib/api-zod
+* lib/db
+* SQLite database files
+* Replit-specific configuration
+
+Target architecture:
+
+GOAL:
+
+* Single Vercel project
+* Single domain
+* Customer storefront at /
+* Admin dashboard at /admin
+* Supabase as the primary backend
+* Supabase Auth for admin login
+* Supabase Storage for product images
+* Supabase PostgreSQL for products, orders, customers, inventory, homepage settings
+* PhonePe payment integration using Vercel Serverless Functions
+* No Express server
+* No SQLite
+* No Drizzle
+* No OpenAPI code generation
+* No Replit-specific runtime requirements
+
+Tasks:
+
+1. AUDIT EXISTING CODEBASE
+
+Create a migration report identifying:
+
+* Dead code
+* Duplicate functionality
+* Unused packages
+* Unused admin implementations
+* Files that can be safely removed
+
+2. REMOVE DUPLICATE ADMIN IMPLEMENTATIONS
+
+Repository currently contains:
+
+* artifacts/papillon-admin
+* artifacts/papillon-store/src/pages/admin
+
+Choose ONE admin implementation only.
+
+Preferred solution:
+
+* Keep admin inside papillon-store
+* Admin routes under /admin/*
+* Remove duplicate admin application
+* Preserve all useful admin functionality:
+
+  * Products
+  * Inventory
+  * Orders
+  * Customers
+  * Homepage Settings
+
+3. REMOVE REPLIT DEPENDENCIES
+
+Remove:
+
+* mandatory PORT checks
+* mandatory BASE_PATH checks
+* Replit-only plugins
+* .replit-artifact dependencies
+* runtime assumptions tied to Replit
+
+Update vite.config.ts so project runs in:
+
+* Replit
+* Local development
+* Vercel
+
+without requiring special environment variables.
+
+Use:
+
+const port = Number(process.env.PORT || 5173)
+
+and
+
+base: "/"
+
+unless a different value is technically required.
+
+4. REMOVE EXPRESS BACKEND
+
+Deprecate:
+
+* artifacts/api-server
+
+Replace all product/order/customer/homepage/inventory operations with Supabase.
+
+Storefront and Admin should communicate directly with Supabase through supabase-js.
+
+5. REMOVE API GENERATION LAYER
+
+Evaluate and remove if no longer required:
+
+* lib/api-client-react
+* lib/api-zod
+* lib/api-spec
+
+Replace generated API calls with typed Supabase services.
+
+6. REMOVE SQLITE + DRIZZLE
+
+Remove:
+
+* better-sqlite3
+* papillon.db
+* papillon.db-shm
+* papillon.db-wal
+* drizzle migration setup
+
+Generate Supabase migration SQL instead.
+
+Create schema for:
+
+products
+product_variants
+inventory
+orders
+order_items
+customers
+homepage_settings
+banners
+announcements
+
+7. CREATE SUPABASE LAYER
+
+Create:
+
+src/lib/supabase/client.ts
+
+Create service modules:
+
+src/services/products.ts
+src/services/orders.ts
+src/services/customers.ts
+src/services/inventory.ts
+src/services/homepage.ts
+
+8. PHONEPE
+
+Do NOT expose secrets to frontend.
+
+Move payment logic into Vercel serverless functions:
+
+/api/phonepe/create-order
+/api/phonepe/verify
+/api/phonepe/callback
+
+Provide environment variables required.
+
+9. FINAL DEPLOYMENT STRUCTURE
+
+Target repository structure:
+
+papillon-store/
+├── src
+│   ├── pages
+│   ├── admin
+│   ├── services
+│   ├── components
+│   └── lib
+│
+├── api
+│   ├── phonepe-create
+│   ├── phonepe-verify
+│   └── phonepe-callback
+│
+├── supabase
+│   └── migrations
+│
+└── public
+
+10. OUTPUT
+
+Before making changes:
+
+* Produce a migration plan
+* List files to delete
+* List files to move
+* List files to merge
+* Explain risks
+
+Then execute migration incrementally with small commits.
+
+Do NOT create new duplicate systems.
+Do NOT create another admin app.
+Do NOT introduce another backend framework.
+Keep architecture simple and optimized for a single-store ecommerce business.
