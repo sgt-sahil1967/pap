@@ -1,0 +1,88 @@
+CONTEXT FROM PREVIOUS SESSION
+
+The repository has already been audited.
+
+A Supabase migration was started but interrupted due to credit exhaustion.
+
+The previous session completed the following analysis:
+
+* Read all API routes
+* Read database layer
+* Read package dependencies
+* Read tsconfig files
+* Built migration plan
+* Planned replacement of SQLite/Drizzle with Supabase
+* Planned creation of schema.sql
+* Planned creation of Supabase migrations
+* Planned creation of Supabase client
+* Planned creation of service layer
+* Planned rewriting of all API routes to use services
+* Planned removal of Drizzle and SQLite
+
+The previous session stopped while requesting:
+
+SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+
+Current objective:
+
+CONTINUE the migration.
+
+Do NOT repeat repository audit.
+
+Do NOT re-analyze the entire codebase.
+
+Assume audit is complete.
+
+Tasks:
+
+1. Verify whether any migration files, Supabase files, service files, or package changes were already created.
+
+2. Continue the interrupted migration from the current repository state.
+
+3. Create or complete:
+
+* schema.sql
+* supabase migration SQL
+* Supabase client
+* Products service
+* Orders service
+* Customers service
+* Inventory service
+* Homepage service
+
+4. Keep existing API routes functional.
+
+5. Update API routes to call the service layer.
+
+6. Do NOT touch UI.
+
+7. Do NOT consolidate admin yet.
+
+8. Do NOT remove api-server yet.
+
+9. Do NOT remove papillon-admin yet.
+
+10. Do NOT remove API libraries yet.
+
+11. Output a migration report before making destructive changes.
+
+Available environment variables:
+
+SUPABASE_URL=<already configured in secrets>
+SUPABASE_ANON_KEY=<already configured in secrets>
+SUPABASE_SERVICE_ROLE_KEY=<already configured in secrets>
+
+Use environment variables only.
+Never hardcode credentials.
+
+Goal:
+
+Complete Phase 3 (Supabase migration) only.
+
+Stop after migration is complete and provide a report of:
+
+* files changed
+* files created
+* files still depending on SQLite/Drizzle
+* next recommended migration step
