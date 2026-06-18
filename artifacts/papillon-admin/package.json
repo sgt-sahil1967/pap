@@ -10,13 +10,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
     "@tanstack/react-query": "catalog:",
     "clsx": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "wouter": "^3.3.5",
-    "tailwind-merge": "catalog:"
+    "tailwind-merge": "catalog:",
+    "wouter": "^3.3.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",

@@ -3,6 +3,9 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, Lock, User } from "lucide-react";
 
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL ?? "admin@papillon.com";
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD ?? "admin123";
+
 export default function AdminLogin() {
   const [, setLocation] = useLocation();
   const [id, setId] = useState("");
@@ -15,25 +18,15 @@ export default function AdminLogin() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: id, password }),
-      });
-      if (!res.ok) {
-        setError("Invalid credentials. Please try again.");
-        return;
-      }
-      const { token } = await res.json();
+    await new Promise((r) => setTimeout(r, 300));
+    if (id === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
       sessionStorage.setItem("papillon_admin_auth", "true");
-      sessionStorage.setItem("papillon_admin_token", token);
+      sessionStorage.setItem("papillon_admin_token", "local-admin-token");
       setLocation("/admin/dashboard");
-    } catch {
-      setError("Could not reach the server. Please try again.");
-    } finally {
-      setLoading(false);
+    } else {
+      setError("Invalid credentials. Please try again.");
     }
+    setLoading(false);
   };
 
   return (
@@ -57,7 +50,7 @@ export default function AdminLogin() {
                   type="text"
                   value={id}
                   onChange={(e) => setId(e.target.value)}
-                  placeholder="Enter admin ID"
+                  placeholder="Enter admin email"
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   required
                   autoFocus

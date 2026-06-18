@@ -1,28 +1,71 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import productsData from "@/data/products.json";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Share2, Minus, Plus, ShoppingBag } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+
+type StoreVariant = {
+  id: number;
+  size: string;
+  color: string | null;
+  price: number;
+  compare_price: number | null;
+  sku: string;
+  inventory_qty: number;
+};
+
+type StoreProduct = {
+  id: number;
+  handle: string;
+  title: string;
+  body: string;
+  type: string;
+  images: string[];
+  product_variants: StoreVariant[];
+};
 
 export default function ProductDetail() {
   const { handle } = useParams();
   const { addToCart } = useCart();
   const { toast } = useToast();
 
-  const product = useMemo(() => {
-    return productsData.find((p) => p.handle === handle);
-  }, [handle]);
-
-  const [selectedSize, setSelectedSize] = useState<string>(
-    product?.variants[0]?.size || ""
-  );
+  const [product, setProduct] = useState<StoreProduct | null | undefined>(undefined);
+  const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState<number>(0);
+
+  useEffect(() => {
+    if (!handle) { setProduct(null); return; }
+    supabase
+      .from("products")
+      .select("*, product_variants(*)")
+      .eq("handle", handle)
+      .eq("status", "active")
+      .maybeSingle()
+      .then(({ data }) => {
+        setProduct(data ?? null);
+        if (data?.product_variants?.[0]) {
+          setSelectedSize(data.product_variants[0].size);
+        }
+      });
+  }, [handle]);
+
+  if (product === undefined) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-muted-foreground">Loading…</div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -40,51 +83,46 @@ export default function ProductDetail() {
     );
   }
 
-  const selectedVariant = product.variants.find((v) => v.size === selectedSize) || product.variants[0];
+  const selectedVariant =
+    product.product_variants.find((v) => v.size === selectedSize) ?? product.product_variants[0];
 
   const handleAddToCart = () => {
+    if (!selectedVariant) return;
     addToCart({
-      productId: product.id,
+      productId: String(product.id),
       title: product.title,
       price: selectedVariant.price,
-      size: selectedSize,
+      size: selectedSize || selectedVariant.size,
       quantity,
-      image: product.images[0]
+      image: product.images[0] ?? "",
     });
-    
     toast({
       title: "Added to Cart!",
-      description: `${quantity}x ${product.title} (${selectedSize}) added to your cart.`,
+      description: `${quantity}x ${product.title} (${selectedSize || selectedVariant.size}) added to your cart.`,
       className: "bg-white border-primary",
     });
   };
 
   const shareProduct = () => {
     if (navigator.share) {
-      navigator.share({
-        title: product.title,
-        url: window.location.href,
-      });
+      navigator.share({ title: product.title, url: window.location.href });
     } else {
       navigator.clipboard.writeText(window.location.href);
-      toast({
-        title: "Link copied!",
-        description: "Product link copied to clipboard.",
-      });
+      toast({ title: "Link copied!", description: "Product link copied to clipboard." });
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
-      
+
       <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
         <div className="text-sm text-muted-foreground mb-6 flex items-center gap-2">
           <Link href="/" className="hover:text-primary">Home</Link>
           <span>/</span>
           <Link href="/collections" className="hover:text-primary">Collections</Link>
           <span>/</span>
-          <Link 
+          <Link
             href={`/collections/${product.type.toLowerCase().replace(/\s+/g, "-")}`}
             className="hover:text-primary"
           >
@@ -98,8 +136,8 @@ export default function ProductDetail() {
           {/* Images */}
           <div className="space-y-4">
             <div className="aspect-square bg-white rounded-2xl overflow-hidden border shadow-sm">
-              <img 
-                src={product.images[selectedImage]} 
+              <img
+                src={product.images[selectedImage]}
                 alt={product.title}
                 className="w-full h-full object-cover"
               />
@@ -131,7 +169,7 @@ export default function ProductDetail() {
                 {product.title}
               </h1>
               <div className="text-3xl font-bold text-foreground">
-                ₹{selectedVariant.price}
+                ₹{selectedVariant?.price ?? "—"}
               </div>
             </div>
 
@@ -141,7 +179,7 @@ export default function ProductDetail() {
                 <span className="text-sm text-muted-foreground underline cursor-pointer hover:text-primary">Size Guide</span>
               </div>
               <div className="flex flex-wrap gap-3">
-                {product.variants.map((v) => (
+                {product.product_variants.map((v) => (
                   <button
                     key={v.size}
                     onClick={() => setSelectedSize(v.size)}
@@ -160,14 +198,14 @@ export default function ProductDetail() {
             <div className="mb-8">
               <span className="font-bold text-foreground block mb-3">Quantity</span>
               <div className="flex items-center gap-4 bg-white border rounded-full w-max p-1 shadow-sm">
-                <button 
+                <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
                   className="p-2 text-muted-foreground hover:text-primary hover:bg-accent rounded-full transition-colors"
                 >
                   <Minus className="h-5 w-5" />
                 </button>
                 <span className="w-8 text-center font-bold text-lg">{quantity}</span>
-                <button 
+                <button
                   onClick={() => setQuantity(quantity + 1)}
                   className="p-2 text-muted-foreground hover:text-primary hover:bg-accent rounded-full transition-colors"
                 >
@@ -177,26 +215,26 @@ export default function ProductDetail() {
             </div>
 
             <div className="flex gap-4 mt-auto">
-              <Button 
+              <Button
                 onClick={handleAddToCart}
                 className="flex-1 bg-secondary hover:bg-secondary/90 text-white rounded-full h-14 text-lg font-bold shadow-md hover:shadow-lg transition-all"
               >
                 <ShoppingBag className="mr-2 h-5 w-5" />
                 Add to Cart
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={shareProduct}
                 className="h-14 w-14 rounded-full border-border text-primary hover:bg-accent hover:text-primary shrink-0"
               >
                 <Share2 className="h-5 w-5" />
               </Button>
             </div>
-            
+
             {product.body && (
               <div className="mt-12 pt-8 border-t">
                 <h3 className="font-heading text-xl font-bold text-primary mb-4">Product Description</h3>
-                <div 
+                <div
                   className="prose prose-purple max-w-none text-muted-foreground"
                   dangerouslySetInnerHTML={{ __html: product.body }}
                 />

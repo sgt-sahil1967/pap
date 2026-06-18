@@ -9,28 +9,6 @@ args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
 
 [workflows]
-runButton = "Project"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "API Server"
-
-[[workflows.workflow]]
-name = "API Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd artifacts/api-server && PORT=8080 pnpm run dev"
-waitForPort = 8080
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [agent]
 stack = "PNPM_WORKSPACE"
@@ -63,6 +41,10 @@ PHONEPE_SALT_KEY = "099eb0cd-02cf-4dc2-a4c3-df3f7d563d2f"
 ADMIN_PASSWORD = "admin123"
 JWT_SECRET = "papillon_admin_secret_2024"
 SUPABASE_URL = "https://ialyfoefljadejiqgxdw.supabase.co"
+VITE_SUPABASE_URL = "https://ialyfoefljadejiqgxdw.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhbHlmb2VmbGphZGVqaXFneGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MjA3NzMsImV4cCI6MjA5NzE5Njc3M30.SA_cv_Sc74Ij0vZPSTRRU-Lu2cFoBhmQYNj9-k2yf2g"
+VITE_ADMIN_EMAIL = "admin@papillon.com"
+VITE_ADMIN_PASSWORD = "admin123"
 
 [nix]
 channel = "stable-25_05"

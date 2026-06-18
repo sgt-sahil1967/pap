@@ -1,18 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import AdminLayout from "./AdminLayout";
 import {
-  Plus, Pencil, Trash2, Search, ChevronDown, ChevronUp, X, Check,
-  Package, Tag, DollarSign, Image as ImageIcon,
+  Plus, Pencil, Trash2, Search, X,
+  Package, Tag, Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const API = "/api";
-
-function getToken() { return sessionStorage.getItem("papillon_admin_token") ?? ""; }
-
-function authHeaders() {
-  return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-}
+import { supabase } from "@/lib/supabase";
 
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "2-3Y", "3-4Y", "4-5Y", "5-6Y", "6-7Y", "7-8Y"];
 const TYPES = ["Cotton Frock", "Kurta Set", "Co-ord set", "Silk Frock", "Parkar Polka", "Paithani Frock"];
@@ -39,7 +32,7 @@ type Product = {
   images: string[];
   status: string;
   variantCount?: number;
-  minPrice?: number;
+  minPrice?: number | null;
   variants?: Variant[];
 };
 
@@ -49,7 +42,7 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function ProductForm({
+function ProductFormUI({
   initial,
   onSave,
   onCancel,
@@ -110,7 +103,6 @@ function ProductForm({
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>
       )}
 
-      {/* Basic Info */}
       <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
           <Package className="w-4 h-4 text-purple-600" />
@@ -131,14 +123,12 @@ function ProductForm({
                 placeholder="cotton-frock-floral" />
             </div>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
             <textarea value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
               rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
               placeholder="Product description…" />
           </div>
-
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Type</label>
@@ -165,7 +155,6 @@ function ProductForm({
         </div>
       </section>
 
-      {/* Images */}
       <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
           <ImageIcon className="w-4 h-4 text-purple-600" />
@@ -177,7 +166,7 @@ function ProductForm({
           </label>
           <textarea value={form.images} onChange={(e) => setForm((f) => ({ ...f, images: e.target.value }))}
             rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none font-mono"
-            placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg" />
+            placeholder="https://example.com/image1.jpg" />
           {form.images.split("\n").filter((u) => u.trim()).length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
               {form.images.split("\n").filter((u) => u.trim()).map((url, i) => (
@@ -189,7 +178,6 @@ function ProductForm({
         </div>
       </section>
 
-      {/* Variants */}
       <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -276,13 +264,26 @@ export default function AdminProducts() {
 
   const load = async () => {
     setLoading(true);
+    setError("");
     try {
-      const params = new URLSearchParams({ limit: "100" });
-      if (statusFilter) params.set("status", statusFilter);
-      if (search) params.set("search", search);
-      const res = await fetch(`${API}/products?${params}`);
-      const data = await res.json();
-      setProducts(data.products ?? []);
+      let query = supabase
+        .from("products")
+        .select("id, handle, title, type, images, status, created_at, product_variants(id, price)")
+        .order("created_at", { ascending: false });
+      if (statusFilter) query = query.eq("status", statusFilter);
+      if (search) query = query.ilike("title", `%${search}%`);
+
+      const { data, error: err } = await query;
+      if (err) throw err;
+      setProducts(
+        (data ?? []).map((p: any) => ({
+          ...p,
+          variantCount: p.product_variants?.length ?? 0,
+          minPrice: p.product_variants?.length
+            ? Math.min(...p.product_variants.map((v: any) => Number(v.price)))
+            : null,
+        }))
+      );
     } catch {
       setError("Failed to load products.");
     } finally {
@@ -296,52 +297,89 @@ export default function AdminProducts() {
   }, [search, statusFilter]);
 
   const handleCreate = async (data: Record<string, unknown>) => {
-    const res = await fetch(`${API}/products`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error((await res.json()).error ?? "Create failed");
+    const { images, variants, ...productData } = data as any;
+    const { data: product, error: err } = await supabase
+      .from("products")
+      .insert({ ...productData, images })
+      .select()
+      .single();
+    if (err) throw new Error(err.message);
+
+    if (variants?.length) {
+      const { error: varErr } = await supabase.from("product_variants").insert(
+        variants.map((v: any) => ({
+          product_id: product.id,
+          size: v.size,
+          color: v.color || null,
+          price: v.price,
+          compare_price: v.comparePrice ?? null,
+          sku: v.sku || null,
+          inventory_qty: v.inventoryQty ?? 0,
+        }))
+      );
+      if (varErr) throw new Error(varErr.message);
+    }
     setView("list");
     load();
   };
 
   const handleEdit = async (data: Record<string, unknown>) => {
     if (!editing) return;
-    const res = await fetch(`${API}/products/${editing.id}`, {
-      method: "PUT",
-      headers: authHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error((await res.json()).error ?? "Update failed");
+    const { images, variants, ...productData } = data as any;
 
-    // sync variants separately
-    const varRes = await fetch(`${API}/products/${editing.id}/variants`, {
-      method: "PUT",
-      headers: authHeaders(),
-      body: JSON.stringify(data.variants),
-    });
-    if (!varRes.ok) throw new Error("Variant update failed");
+    const { error: err } = await supabase
+      .from("products")
+      .update({ ...productData, images })
+      .eq("id", editing.id);
+    if (err) throw new Error(err.message);
 
+    await supabase.from("product_variants").delete().eq("product_id", editing.id);
+    if (variants?.length) {
+      await supabase.from("product_variants").insert(
+        variants.map((v: any) => ({
+          product_id: editing.id,
+          size: v.size,
+          color: v.color || null,
+          price: v.price,
+          compare_price: v.comparePrice ?? null,
+          sku: v.sku || null,
+          inventory_qty: v.inventoryQty ?? 0,
+        }))
+      );
+    }
     setView("list");
     setEditing(null);
     load();
   };
 
   const openEdit = async (p: Product) => {
-    const res = await fetch(`${API}/products/${p.id}`);
-    const full = await res.json();
-    setEditing(full);
-    setView("edit");
+    const { data } = await supabase
+      .from("products")
+      .select("*, product_variants(*)")
+      .eq("id", p.id)
+      .single();
+    if (data) {
+      setEditing({
+        ...data,
+        variants: (data.product_variants ?? []).map((v: any) => ({
+          id: v.id,
+          size: v.size,
+          color: v.color ?? "",
+          price: v.price,
+          comparePrice: v.compare_price ?? "",
+          sku: v.sku ?? "",
+          inventoryQty: v.inventory_qty ?? 0,
+        })),
+      });
+      setView("edit");
+    }
   };
 
   const confirmDelete = async () => {
     if (deleteId == null) return;
     setDeleting(true);
-    await fetch(`${API}/products/${deleteId}?hard=true`, {
-      method: "DELETE",
-      headers: authHeaders(),
-    });
+    await supabase.from("product_variants").delete().eq("product_id", deleteId);
+    await supabase.from("products").delete().eq("id", deleteId);
     setDeleteId(null);
     setDeleting(false);
     load();
@@ -351,10 +389,8 @@ export default function AdminProducts() {
     return (
       <AdminLayout>
         <div className="max-w-2xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">New Product</h1>
-          </div>
-          <ProductForm onSave={handleCreate} onCancel={() => setView("list")} />
+          <div className="mb-6"><h1 className="text-2xl font-bold text-gray-900">New Product</h1></div>
+          <ProductFormUI onSave={handleCreate} onCancel={() => setView("list")} />
         </div>
       </AdminLayout>
     );
@@ -368,7 +404,7 @@ export default function AdminProducts() {
             <h1 className="text-2xl font-bold text-gray-900">Edit Product</h1>
             <p className="text-gray-500 text-sm mt-1">{editing.title}</p>
           </div>
-          <ProductForm initial={editing} onSave={handleEdit} onCancel={() => { setView("list"); setEditing(null); }} />
+          <ProductFormUI initial={editing} onSave={handleEdit} onCancel={() => { setView("list"); setEditing(null); }} />
         </div>
       </AdminLayout>
     );
@@ -377,14 +413,12 @@ export default function AdminProducts() {
   return (
     <AdminLayout>
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Products</h1>
             <p className="text-gray-500 text-sm mt-1">{products.length} total</p>
           </div>
-          <Button onClick={() => setView("create")}
-            className="bg-purple-700 hover:bg-purple-800 text-white flex items-center gap-2">
+          <Button onClick={() => setView("create")} className="bg-purple-700 hover:bg-purple-800 text-white flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Product
           </Button>
         </div>
@@ -393,7 +427,6 @@ export default function AdminProducts() {
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">{error}</div>
         )}
 
-        {/* Filters */}
         <div className="flex gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -409,7 +442,6 @@ export default function AdminProducts() {
           </select>
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loading ? (
             <div className="px-6 py-12 text-center text-gray-400 text-sm">Loading…</div>
@@ -475,20 +507,16 @@ export default function AdminProducts() {
         </div>
       </div>
 
-      {/* Delete confirmation modal */}
       {deleteId != null && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
             <h3 className="font-bold text-gray-900 text-lg mb-2">Delete product?</h3>
             <p className="text-gray-500 text-sm mb-6">This will permanently remove the product and all its variants. This cannot be undone.</p>
             <div className="flex gap-3">
-              <Button onClick={confirmDelete} disabled={deleting}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+              <Button onClick={confirmDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white">
                 {deleting ? "Deleting…" : "Delete"}
               </Button>
-              <Button variant="outline" onClick={() => setDeleteId(null)} className="flex-1">
-                Cancel
-              </Button>
+              <Button variant="outline" onClick={() => setDeleteId(null)} className="flex-1">Cancel</Button>
             </div>
           </div>
         </div>

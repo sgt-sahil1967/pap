@@ -1,18 +1,42 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+
+type Customer = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  created_at: string;
+};
 
 export default function Customers() {
   const [search, setSearch] = useState("");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const searchRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const mockCustomers = [
-    { id: "1", name: "Alice Cooper", email: "alice@example.com", phone: "+91 98765 43210", orders: 5, joined: "2023-01-15" },
-    { id: "2", name: "Bob Builder", email: "bob@example.com", phone: "+91 87654 32109", orders: 1, joined: "2023-08-22" },
-    { id: "3", name: "Charlie Day", email: "charlie@example.com", phone: "+91 76543 21098", orders: 12, joined: "2022-11-05" },
-    { id: "4", name: "Diana Prince", email: "diana@example.com", phone: "+91 65432 10987", orders: 3, joined: "2023-09-10" },
-  ];
+  const load = async () => {
+    setLoading(true);
+    let query = supabase
+      .from("customers")
+      .select("id, name, email, phone, created_at")
+      .order("created_at", { ascending: false });
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    const { data } = await query;
+    setCustomers((data ?? []) as Customer[]);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(load, 300);
+  }, [search]);
 
   return (
     <div className="space-y-6">
@@ -33,28 +57,40 @@ export default function Customers() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead className="text-center">Orders</TableHead>
-                <TableHead className="text-right">Joined</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockCustomers.map((customer) => (
-                <TableRow key={customer.id} className="cursor-pointer hover:bg-muted/50">
-                  <TableCell className="font-medium">{customer.name}</TableCell>
-                  <TableCell>{customer.email}</TableCell>
-                  <TableCell>{customer.phone}</TableCell>
-                  <TableCell className="text-center">{customer.orders}</TableCell>
-                  <TableCell className="text-right">{customer.joined}</TableCell>
+          {loading ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead className="text-right">Joined</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {customers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      No customers yet
+                    </TableCell>
+                  </TableRow>
+                ) : customers.map((customer) => (
+                  <TableRow key={customer.id} className="hover:bg-muted/50">
+                    <TableCell className="font-medium">{customer.name}</TableCell>
+                    <TableCell>{customer.email}</TableCell>
+                    <TableCell>{customer.phone ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {new Date(customer.created_at).toLocaleDateString("en-IN", {
+                        day: "2-digit", month: "short", year: "numeric",
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,15 +1,29 @@
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { Link } from "wouter";
-import productsData from "@/data/products.json";
 import { Button } from "@/components/ui/button";
 import { useSiteConfig } from "@/context/SiteConfigContext";
+import { supabase, type StoreProduct } from "@/lib/supabase";
 
 export default function Home() {
-  const featuredProducts = productsData.slice(0, 8);
   const { config } = useSiteConfig();
   const { heroBanner } = config;
+
+  const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("products")
+      .select("*, product_variants(*)")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(8)
+      .then(({ data }) => {
+        if (data) setFeaturedProducts(data as StoreProduct[]);
+      });
+  }, []);
 
   const categories = [
     { name: "Cotton Frock", bg: "bg-pink-100" },
@@ -25,7 +39,7 @@ export default function Home() {
       <Header />
 
       <main className="flex-1">
-        {/* Hero / Banner Section — entire section is a clickable link */}
+        {/* Hero / Banner Section */}
         <Link href={heroBanner.linkUrl}>
           <section
             className="bg-accent/30 py-20 px-4 text-center cursor-pointer relative overflow-hidden"
@@ -81,11 +95,29 @@ export default function Home() {
                 View All →
               </Link>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {featuredProducts.map((product, i) => (
-                <ProductCard key={product.id} product={product} index={i} />
-              ))}
-            </div>
+            {featuredProducts.length === 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-gray-100 rounded-lg aspect-square animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {featuredProducts.map((product, i) => (
+                  <ProductCard
+                    key={product.id}
+                    product={{
+                      handle: product.handle,
+                      title: product.title,
+                      type: product.type,
+                      images: product.images ?? [],
+                      variants: product.product_variants.map((v) => ({ price: v.price })),
+                    }}
+                    index={i}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </section>
 

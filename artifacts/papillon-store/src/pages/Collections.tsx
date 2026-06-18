@@ -3,50 +3,80 @@ import { useParams, Link } from "wouter";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/ui/ProductCard";
-import productsData from "@/data/products.json";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-const allTypes = Array.from(new Set(productsData.map(p => p.type))).filter(Boolean);
-const allSizes = Array.from(new Set(productsData.flatMap(p => p.variants.map(v => v.size))));
+type StoreVariant = { size: string; price: number };
+type StoreProduct = {
+  id: number;
+  handle: string;
+  title: string;
+  type: string;
+  images: string[];
+  product_variants: StoreVariant[];
+};
 
 export default function Collections() {
   const params = useParams();
   const routeType = params.type;
 
+  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedSize, setSelectedSize] = useState<string>("all");
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   useEffect(() => {
+    supabase
+      .from("products")
+      .select("id, handle, title, type, images, product_variants(size, price)")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setProducts(data as StoreProduct[]);
+        setLoading(false);
+      });
+  }, []);
+
+  const allTypes = useMemo(
+    () => Array.from(new Set(products.map((p) => p.type))).filter(Boolean),
+    [products]
+  );
+  const allSizes = useMemo(
+    () => Array.from(new Set(products.flatMap((p) => p.product_variants.map((v) => v.size)))),
+    [products]
+  );
+
+  useEffect(() => {
     if (routeType) {
-      const formattedType = routeType.replace(/-/g, " ");
-      const matchingType = allTypes.find(
-        (t) => t.toLowerCase() === formattedType.toLowerCase()
-      );
-      if (matchingType) setSelectedType(matchingType);
+      const formatted = routeType.replace(/-/g, " ");
+      const match = allTypes.find((t) => t.toLowerCase() === formatted.toLowerCase());
+      if (match) setSelectedType(match);
     } else {
       setSelectedType("all");
     }
-  }, [routeType]);
+  }, [routeType, allTypes]);
 
   const filteredProducts = useMemo(() => {
-    return productsData.filter((product) => {
+    return products.filter((product) => {
       const matchesSearch = product.title.toLowerCase().includes(search.toLowerCase());
       const matchesType = selectedType === "all" || product.type === selectedType;
-      const matchesSize = selectedSize === "all" || product.variants.some((v) => v.size === selectedSize);
-      
+      const matchesSize =
+        selectedSize === "all" || product.product_variants.some((v) => v.size === selectedSize);
       return matchesSearch && matchesType && matchesSize;
     });
-  }, [search, selectedType, selectedSize]);
+  }, [products, search, selectedType, selectedSize]);
+
+  const mappedProducts = filteredProducts.map((p) => ({ ...p, variants: p.product_variants }));
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
-      
+
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           <div>
@@ -54,7 +84,7 @@ export default function Collections() {
               {routeType ? selectedType + "s" : "All Collections"}
             </h1>
             <p className="text-muted-foreground mt-2">
-              Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
+              Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
             </p>
           </div>
 
@@ -68,7 +98,7 @@ export default function Collections() {
                 className="pl-9"
               />
             </div>
-            <button 
+            <button
               className="md:hidden px-4 py-2 bg-accent text-primary rounded-md font-medium"
               onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
             >
@@ -78,8 +108,7 @@ export default function Collections() {
         </div>
 
         <div className="flex flex-col md:flex-row gap-8">
-          {/* Sidebar Filters */}
-          <div className={`md:w-64 space-y-6 ${isMobileFiltersOpen ? 'block' : 'hidden md:block'}`}>
+          <div className={`md:w-64 space-y-6 ${isMobileFiltersOpen ? "block" : "hidden md:block"}`}>
             <div className="bg-white p-6 rounded-lg border shadow-sm space-y-6">
               <div>
                 <Label className="text-primary font-bold mb-3 block">Product Type</Label>
@@ -89,7 +118,7 @@ export default function Collections() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    {allTypes.map(type => (
+                    {allTypes.map((type) => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>
@@ -104,7 +133,7 @@ export default function Collections() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Sizes</SelectItem>
-                    {allSizes.map(size => (
+                    {allSizes.map((size) => (
                       <SelectItem key={size} value={size}>{size}</SelectItem>
                     ))}
                   </SelectContent>
@@ -113,11 +142,12 @@ export default function Collections() {
             </div>
           </div>
 
-          {/* Product Grid */}
           <div className="flex-1">
-            {filteredProducts.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-20 text-muted-foreground">Loading products…</div>
+            ) : mappedProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {filteredProducts.map((product, i) => (
+                {mappedProducts.map((product, i) => (
                   <ProductCard key={product.id} product={product} index={i} />
                 ))}
               </div>
@@ -126,7 +156,7 @@ export default function Collections() {
                 <div className="text-6xl mb-4">🌸</div>
                 <h3 className="font-heading text-2xl font-bold text-primary mb-2">No products found</h3>
                 <p className="text-muted-foreground mb-6">Try adjusting your filters to find what you're looking for.</p>
-                <button 
+                <button
                   onClick={() => { setSearch(""); setSelectedType("all"); setSelectedSize("all"); }}
                   className="px-6 py-2 bg-primary text-white rounded-full font-medium hover:bg-primary/90 transition-colors"
                 >
